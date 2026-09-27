@@ -1,0 +1,1 @@
+"""SMARTER AI backend package."""

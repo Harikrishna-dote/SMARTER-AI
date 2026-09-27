@@ -1,0 +1,116 @@
+{
+  "app": {
+    "name": "SMARTER-AI",
+    "tagline": "Your Intelligent Learning Companion"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Something went wrong. Please try again.",
+    "success": "Success!",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "search": "Search",
+    "submit": "Submit",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "home": "Home",
+    "settings": "Settings",
+    "profile": "Profile",
+    "logout": "Logout",
+    "language": "Language",
+    "theme": "Theme",
+    "notifications": "Notifications",
+    "help": "Help",
+    "about": "About",
+    "version": "Version",
+    "welcome": "Welcome",
+    "goodMorning": "Good Morning",
+    "goodAfternoon": "Good Afternoon",
+    "goodEvening": "Good Evening",
+    "noResults": "No results found",
+    "learnMore": "Learn More",
+    "getStarted": "Get Started",
+    "allRightsReserved": "All rights reserved"
+  },
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "email": "Email",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "forgotPassword": "Forgot Password?",
+    "resetPassword": "Reset Password",
+    "dontHaveAccount": "Don't have an account?",
+    "alreadyHaveAccount": "Already have an account?",
+    "signIn": "Sign In",
+    "signUp": "Sign Up"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "overview": "Overview",
+    "recentActivity": "Recent Activity",
+    "stats": {
+      "conversations": "Conversations",
+      "documents": "Documents",
+      "memories": "Memories",
+      "agents": "Agents"
+    }
+  },
+  "chat": {
+    "title": "AI Tutor",
+    "placeholder": "Ask your tutor anything...",
+    "send": "Send",
+    "newConversation": "New Conversation",
+    "typing": "Tutor is typing...",
+    "voiceEnabled": "Voice enabled",
+    "voiceDisabled": "Voice disabled"
+  },
+  "classroom": {
+    "title": "Virtual Classroom",
+    "startLesson": "Start Lesson",
+    "joinClass": "Join Class",
+    "leaveClass": "Leave Class",
+    "participants": "Participants",
+    "chat": "Class Chat",
+    "shareScreen": "Share Screen",
+    "muteMic": "Mute Microphone",
+    "unmuteMic": "Unmute Microphone",
+    "cameraOn": "Camera On",
+    "cameraOff": "Camera Off",
+    "endCall": "End Call"
+  },
+  "lessons": {
+    "title": "Lessons",
+    "start": "Start Lesson",
+    "outline": "Lesson Outline",
+    "practice": "Practice",
+    "quiz": "Quiz",
+    "notes": "Notes",
+    "homework": "Homework",
+    "difficulty": "Difficulty",
+    "estimatedTime": "Estimated Time",
+    "objectives": "Learning Objectives"
+  },
+  "quiz": {
+    "title": "Quiz",
+    "submit": "Submit Quiz",
+    "score": "Score",
+    "correct": "Correct",
+    "incorrect": "Incorrect",
+    "explanation": "Explanation",
+    "nextQuestion": "Next Question",
+    "retake": "Retake Quiz"
+  },
+  "errors": {
+    "networkError": "Network error. Please check your connection.",
+    "unauthorized": "You are not authorized to access this resource.",
+    "forbidden": "Access denied.",
+    "notFound": "Resource not found.",
+    "serverError": "Server error. Please try again later.",
+    "validationError": "Invalid input data."
+  }
+}

@@ -1,0 +1,116 @@
+{
+  "app": {
+    "name": "స్మార్టర్-ఎఐ",
+    "tagline": "మీ ఆంతరంగిక అభ్యాస సహచరుడు"
+  },
+  "common": {
+    "loading": "లోడ్ అవుతోంది...",
+    "error": "ఏదో తప్పు జరిగింది. దయచేసి మళ్లీ ప్రయత్నించండి.",
+    "success": "విజయం!",
+    "cancel": "రద్దు చేయి",
+    "save": "భద్రపు",
+    "delete": "తొలగించు",
+    "edit": "సవరించు",
+    "close": "మూసివేయి",
+    "search": "వెతుకు",
+    "submit": "సమర్పించు",
+    "back": "వెనుకకు",
+    "next": "తరువాత",
+    "previous": "ముందు",
+    "home": "హోమ్",
+    "settings": "సెట్టింగ్‌లు",
+    "profile": "ప్రొఫైల్",
+    "logout": "లాగ్ అవుట్",
+    "language": "భాష",
+    "theme": "థీమ్",
+    "notifications": "నోటిఫికేషన్‌లు",
+    "help": "సహాయం",
+    "about": "గురించి",
+    "version": "వెర్షన్",
+    "welcome": "స్వాగతం",
+    "goodMorning": "శుభోదయం",
+    "goodAfternoon": "శుభ మద్యాహ్నం",
+    "goodEvening": "శుభ సాయంత్రం",
+    "noResults": "ఫలితాలు ఏవీ కనుగొనలేదు",
+    "learnMore": "మరింత తెలుసుకోండి",
+    "getStarted": "ప్రారంభించండి",
+    "allRightsReserved": "అన్ని హక్కులు రిజర్వ్ చేయబడినవి"
+  },
+  "auth": {
+    "login": "లాగిన్",
+    "register": "నమోదు",
+    "email": "ఇమెయిల్",
+    "password": "పాస్వర్డ్",
+    "confirmPassword": "పాస్వర్డ్ నిర్ధారించండి",
+    "forgotPassword": "పాస్వర్డ్ మోసేశారా?",
+    "resetPassword": "పాస్వర్డ్ రిసెట్ చేయి",
+    "dontHaveAccount": "ఖాతా లేదా?",
+    "alreadyHaveAccount": "ఇప్పుడే ఖాతా ఉందా?",
+    "signIn": "సైన్ ఇన్",
+    "signUp": "సైన్ అప్"
+  },
+  "dashboard": {
+    "title": "డాష్‌బోర్డ్",
+    "overview": "అవలోకనం",
+    "recentActivity": "ఇటీవలి కార్యకలాపం",
+    "stats": {
+      "conversations": "సంభాషణలు",
+      "documents": "డాక్యుమెంట్‌లు",
+      "memories": "స్మరణలు",
+      "agents": "ఏజెంట్‌లు"
+    }
+  },
+  "chat": {
+    "title": "ఎఐ ట్యూటర్",
+    "placeholder": "మీ ట్యూటర్‌కు ఏమైనా అడగండి...",
+    "send": "పంపు",
+    "newConversation": "కొత్త సంభాషణ",
+    "typing": "ట్యూటర్ టైప్ చేస్తున్నాడు...",
+    "voiceEnabled": "వాయిస్ ఎనేబుల్",
+    "voiceDisabled": "వాయిస్ డిసేబుల్"
+  },
+  "classroom": {
+    "title": "వర్చ్యువల్ క్లాస్ రూం",
+    "startLesson": "పాఠం ప్రారంభించండి",
+    "joinClass": "క్లాస్‌లో చేరండి",
+    "leaveClass": "క్లాస్ నుండి తొలగించుకోండి",
+    "participants": "భాగస్వాములు",
+    "chat": "క్లాస్ చాట్",
+    "shareScreen": "స్క్రీన్ షేర్ చేయి",
+    "muteMic": "మైక్రోఫోన్ మ్యూట్",
+    "unmuteMic": "మైక్రోఫోన్ అన్‌మ్యూట్",
+    "cameraOn": "కెమెరా ఆన్",
+    "cameraOff": "కెమెరా ఆఫ్",
+    "endCall": "కాల్ ముగించు"
+  },
+  "lessons": {
+    "title": "పాఠాలు",
+    "start": "పాఠం ప్రారంభించండి",
+    "outline": "పాఠ రూపరేఖ",
+    "practice": "అభ్యాసం",
+    "quiz": "క్విజ్",
+    "notes": "నోట్స్",
+    "homework": "హోం వర్క్",
+    "difficulty": "కష్టతరం",
+    "estimatedTime": "అంచనా సమయం",
+    "objectives": "అభ్యాస లక్ష్యాలు"
+  },
+  "quiz": {
+    "title": "క్విజ్",
+    "submit": "క్విజ్ సమర్పించు",
+    "score": "స్కోర్",
+    "correct": "సరైనది",
+    "incorrect": "తప్పు",
+    "explanation": "వివరణ",
+    "nextQuestion": "తరువాతి ప్రశ్న",
+    "retake": "క్విజ్ మళ్లీ తీసుకోండి"
+  },
+  "errors": {
+    "networkError": "నెట్వర్క్ లోపం. మీ కనెక్షన్‌ను తనిఖీ చేయండి.",
+    "unauthorized": "మీకు ఈ వనరును ప్రాప్యించడానికి అనుమతి లేదు.",
+    "forbidden": "ఆక్సెస్ నిరాకరించబడింది.",
+    "notFound": "వనరు కనుగొనబడలేదు.",
+    "serverError": "సర్వర్ లోపం. దయచేసి తరువాత మళ్లీ ప్రయత్నించండి.",
+    "validationError": "చెల్లని ఇన్‌పుట్ డేటా."
+  }
+}

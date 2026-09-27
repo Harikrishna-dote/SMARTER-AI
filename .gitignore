@@ -1,0 +1,66 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+backend/.venv_clean/
+htmlcov/
+.coverage
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# Node
+node_modules/
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime data
+logs/
+documents/uploads/*
+documents/extracted/*
+documents/pdf/*
+documents/word/*
+database/backups/*
+temp_audio/
+
+backend/documents/uploads/*
+backend/documents/extracted/*
+backend/documents/pdf/*
+backend/documents/word/*
+backend/temp_audio/
+
+# Local AI models
+backend/models/
+
+# Local environment files
+backend/temp_env.txt
+
+# Local audio
+*.wav
+
+# Test artifacts
+frontend/test-results/
+
+# Old Git repository
+.git_old_backup/
+
+# Agent/editor
+.agents/
+.codex/

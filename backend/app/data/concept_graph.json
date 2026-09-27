@@ -1,0 +1,24 @@
+{
+  "concepts": {
+    "python": {
+      "prerequisites": [],
+      "description": "General purpose programming language."
+    },
+    "algebra": {
+      "prerequisites": [],
+      "description": "Fundamental mathematical operations and equations."
+    },
+    "matrices": {
+      "prerequisites": ["algebra"],
+      "description": "Rectangular arrays of numbers."
+    },
+    "neural_networks": {
+      "prerequisites": ["python", "matrices"],
+      "description": "Deep learning models inspired by biological brain."
+    },
+    "machine_learning": {
+      "prerequisites": ["python", "algebra", "matrices"],
+      "description": "Algorithms that learn from data."
+    }
+  }
+}
