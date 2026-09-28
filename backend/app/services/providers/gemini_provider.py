@@ -123,7 +123,7 @@ class GeminiProvider:
 
         raise last_exc or RuntimeError("Gemini request failed after retries")
 
-    async def stream_chat(
+      async def stream_chat(
         self,
         messages: list[dict[str, str]],
         *,
@@ -133,50 +133,130 @@ class GeminiProvider:
         json_mode: bool = False,
         request_timeout_seconds: int | None = None,
     ) -> AsyncIterator[str]:
+        """
+        Stream Gemini responses when the selected model supports streaming.
+
+        Some Gemini model/key combinations may expose generateContent but
+        return 404 for streamGenerateContent. In that case, transparently
+        fall back to generateContent so the AI request still succeeds.
+        """
         payload = self._build_payload(
             messages,
             temperature=temperature,
             max_output_tokens=max_output_tokens,
             json_mode=json_mode,
         )
-        model_name = (model and "gemini" in model.lower()) and model or self.default_model
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:streamGenerateContent?alt=sse"
-        headers = {"x-goog-api-key": self.api_key}
-        client = await self._get_client()
 
-        last_exc: Exception | None = None
-        for attempt in range(3):
-            emitted = False
-            try:
-                async with client.stream("POST", url, headers=headers, json=payload, timeout=request_timeout_seconds or self.settings.ai_request_timeout_seconds) as response:
+        model_name = (model and "gemini" in model.lower()) and model or self.default_model
+        headers = {
+            "x-goog-api-key": self.api_key,
+            "Content-Type": "application/json",
+        }
+
+        client = await self._get_client()
+        timeout = request_timeout_seconds or self.settings.ai_request_timeout_seconds
+
+        stream_url = (
+            f"https://generativelanguage.googleapis.com/v1beta/"
+            f"models/{model_name}:streamGenerateContent?alt=sse"
+        )
+
+        # First try the normal streaming endpoint.
+        try:
+            async with client.stream(
+                "POST",
+                stream_url,
+                headers=headers,
+                json=payload,
+                timeout=timeout,
+            ) as response:
+
+                # If this model/key does not support streaming, fall back
+                # to the normal generateContent endpoint below.
+                if response.status_code == 404:
+                    logger.warning(
+                        "Gemini streaming unavailable for model %s "
+                        "(HTTP 404). Falling back to generateContent.",
+                        model_name,
+                    )
+                else:
                     response.raise_for_status()
+
+                    emitted = False
+
                     async for line in response.aiter_lines():
                         line = line.strip()
+
                         if not line or line.startswith(":"):
                             continue
+
                         if line.startswith("data:"):
                             line = line.removeprefix("data:").strip()
+
                         if line == "[DONE]":
                             break
+
                         try:
                             import json
                             data = json.loads(line)
                         except json.JSONDecodeError:
                             continue
+
                         text = self._text(data)
+
                         if text:
                             emitted = True
                             yield text
-                if emitted:
-                    return
+
+                    if emitted:
+                        return
+
+                    # Streaming endpoint succeeded but returned no text.
+                    # Fall through to normal generation as a safety fallback.
+                    logger.warning(
+                        "Gemini streaming returned no text for model %s. "
+                        "Falling back to generateContent.",
+                        model_name,
+                    )
+
+        except Exception as exc:
+            # Network/timeouts can still be retried below.
+            if not isinstance(exc, httpx.HTTPStatusError):
+                logger.warning(
+                    "Gemini streaming request failed for model %s: %s. "
+                    "Falling back to generateContent.",
+                    model_name,
+                    exc,
+                )
+            elif exc.response.status_code not in {400, 404, 429, 500, 502, 503, 504}:
+                raise
+
+        # Reliable fallback: normal generateContent.
+        #
+        # This is especially important for models where the API key exposes
+        # generateContent but not streamGenerateContent.
+        try:
+            text = await self.chat(
+                messages,
+                model=model_name,
+                temperature=temperature,
+                max_output_tokens=max_output_tokens,
+                json_mode=json_mode,
+                request_timeout_seconds=timeout,
+            )
+
+            if text:
+                yield text
                 return
-            except Exception as exc:
-                last_exc = exc
-                if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 429:
-                    self._mark_unavailable()
-                if not self._is_retryable_error(exc) or attempt == 2:
-                    break
-                sleep = min(2 ** attempt + random.uniform(0, 1), 12)
-                await asyncio.sleep(sleep)
-        
-        raise last_exc or RuntimeError("Gemini stream failed after retries")
+
+            raise ValueError(
+                f"Gemini returned an empty response for model {model_name}"
+            )
+
+        except Exception as exc:
+            logger.error(
+                "Gemini generation failed for model %s: %s",
+                model_name,
+                exc,
+            )
+            raise
