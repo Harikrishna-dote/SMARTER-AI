@@ -123,7 +123,7 @@ class GeminiProvider:
 
         raise last_exc or RuntimeError("Gemini request failed after retries")
 
-      async def stream_chat(
+    async def stream_chat(
         self,
         messages: list[dict[str, str]],
         *,
