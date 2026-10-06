@@ -1,6 +1,5 @@
 """Enhanced error handling and logging middleware."""
 import logging
-import traceback
 import uuid
 from contextlib import asynccontextmanager
 from typing import Callable
@@ -68,7 +67,6 @@ class EnhancedErrorMiddleware(BaseHTTPMiddleware):
         except RequestValidationError:
             raise
         except Exception as exc:
-            traceback.print_exc()
             return await self._handle_exception(request, exc, request_id)
 
     async def _handle_exception(
@@ -108,7 +106,7 @@ class EnhancedErrorMiddleware(BaseHTTPMiddleware):
 
         error_response = ErrorResponse(
             error_id=request_id,
-            message=str(exc),
+            message="An unexpected server error occurred. Please try again.",
             code=error_code,
             status_code=status_code,
             details=details,

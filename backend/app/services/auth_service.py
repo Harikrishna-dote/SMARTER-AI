@@ -1,7 +1,5 @@
 import logging
-import traceback
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,13 +22,14 @@ class AuthService:
         existing = await self.users.get_by_email(payload.email)
         if existing:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email is already registered")
-        admin_count = await self.db.scalar(select(func.count(User.id)).where(User.is_admin.is_(True)))
         role = getattr(payload, 'role', 'student') or 'student'
         user = User(
             email=payload.email,
             hashed_password=hash_password(payload.password),
             full_name=payload.full_name,
-            is_admin=(admin_count or 0) == 0,
+            # Public registration must never create an administrator. Admins
+            # are provisioned through explicit startup configuration.
+            is_admin=False,
             role=role,
         )
         try:

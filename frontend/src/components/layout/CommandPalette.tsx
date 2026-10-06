@@ -15,12 +15,15 @@ export function CommandPalette() {
   const navigate = useNavigate();
   const open = useAppSelector((s) => s.ui.commandOpen);
   const isAdmin = useAppSelector((s) => s.auth.user?.is_admin ?? false);
+  const role = useAppSelector((s) => s.auth.user?.role);
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const [remote, setRemote] = useState<SearchResultItem[]>([]);
 
   const pages = useMemo(
-    () => NAV_ITEMS.filter((i) => !i.adminOnly || isAdmin).map((i) => ({
+    () => NAV_ITEMS.filter((i) =>
+      (!i.adminOnly || isAdmin) && (!i.roles || (role ? i.roles.includes(role) : false)),
+    ).map((i) => ({
       id: `page-${i.to}`,
       title: i.label,
       type: 'page' as const,
@@ -28,7 +31,7 @@ export function CommandPalette() {
       description: i.description,
       snippet: '',
     })),
-    [isAdmin],
+    [isAdmin, role],
   );
 
   const fuse = useMemo(

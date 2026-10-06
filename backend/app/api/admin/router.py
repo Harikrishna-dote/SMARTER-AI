@@ -195,6 +195,11 @@ async def get_student_progress(
     admin: User = Depends(require_role("teacher", "parent", "administrator")),
     db: AsyncSession = Depends(get_db),
 ):
+    # There is currently no parent-child relationship table in the data model.
+    # Do not let a parent enumerate arbitrary student progress until that
+    # relationship is represented and checked here.
+    if admin.role == "parent":
+        raise HTTPException(status_code=403, detail="Parent-child linking is not configured")
     result = await db.execute(select(ClassroomProgress).where(ClassroomProgress.user_id == student_id))
     progress = result.scalar_one_or_none()
     if not progress:

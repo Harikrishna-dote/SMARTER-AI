@@ -3,14 +3,11 @@ import { motion } from 'framer-motion';
 import {
   Users,
   Baby,
-  Target,
   TrendingUp,
   Flame,
   Zap,
-  BookOpen,
   Clock,
   CheckCircle2,
-  XCircle,
   ArrowUpRight,
   X,
 } from 'lucide-react';
@@ -21,35 +18,19 @@ import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { api } from '../lib/api';
 import type { User, StudentProgress } from '../lib/types';
-import { cn } from '../lib/utils';
 
 export default function ParentDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [children, setChildren] = useState<User[]>([]);
+  const children: User[] = [];
   const [loading, setLoading] = useState(true);
   const [selectedChild, setSelectedChild] = useState<User | null>(null);
   const [progress, setProgress] = useState<StudentProgress | null>(null);
   const [progressLoading, setProgressLoading] = useState(false);
 
   useEffect(() => {
-    if (user?.role !== 'parent') return;
-    let active = true;
-    (async () => {
-      try {
-        const data = await api.listStudents();
-        if (active) setChildren(data);
-      } catch (err) {
-        if (active) {
-          const message = err instanceof Error ? err.message : 'Failed to load children';
-          toast({ title: 'Could not load dashboard', description: message, variant: 'error' });
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => { active = false; };
-  }, [user?.role, toast]);
+    if (user?.role === 'parent') setLoading(false);
+  }, [user?.role]);
 
   const loadProgress = async (child: User) => {
     setSelectedChild(child);
@@ -142,7 +123,7 @@ export default function ParentDashboard() {
           <EmptyState
             icon={<Baby size={32} />}
             title="No children linked"
-            description="Link your children's accounts to track their progress here."
+            description="Parent-child linking is not configured yet. No student data is shown until an explicit relationship is available."
           />
         </GlassCard>
       ) : (

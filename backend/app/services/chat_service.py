@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import math
 import re
 import time
@@ -24,6 +25,9 @@ from app.services.tutor_service import build_attachment_context, build_tutor_sys
 from app.services.wake_word import extract_wake_command
 
 
+logger = logging.getLogger(__name__)
+
+
 @dataclass
 class PreparedChat:
     conversation: Conversation
@@ -37,6 +41,7 @@ class PreparedChat:
 
 
 DEFAULT_CHAT_TITLES = {"New conversation", "New AI chat"}
+AI_RETRY_MESSAGE = "The AI service is temporarily unavailable. Please retry in a moment."
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+(?:'[a-z0-9]+)?")
 STOP_WORDS = {
     "a",
@@ -125,9 +130,10 @@ class ChatService:
                 max_output_tokens=prepared.max_output_tokens,
             )
         except (httpx.HTTPError, RuntimeError, TimeoutError, ValueError) as exc:
+            logger.warning("Chat provider request failed: %s", exc)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"AI request failed: {str(exc)}",
+                detail=AI_RETRY_MESSAGE,
             ) from exc
 
         sanitized_text = self._sanitize_output(assistant_text)
@@ -193,9 +199,10 @@ class ChatService:
                     chunks.append(chunk)
                     yield {"type": "token", "content": chunk}
         except (httpx.HTTPError, RuntimeError, TimeoutError, ValueError) as exc:
+            logger.warning("Streaming chat provider request failed: %s", exc)
             yield {
                 "type": "error",
-                "message": f"AI request failed: {str(exc)}",
+                "message": AI_RETRY_MESSAGE,
             }
             return
 

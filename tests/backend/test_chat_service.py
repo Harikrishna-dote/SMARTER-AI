@@ -164,3 +164,52 @@ async def test_stream_send_preserves_provider_chunk_whitespace(monkeypatch):
     ]
     assert saved["assistant"] == "Okay, let's\n\n    keep code\nH₂O ≤ x → y"
     assert saved["cache"] == saved["assistant"]
+
+
+@pytest.mark.asyncio
+async def test_stream_send_hides_provider_error_details(monkeypatch):
+    service = ChatService.__new__(ChatService)
+    prepared = SimpleNamespace(
+        conversation=SimpleNamespace(id="conv-1"),
+        prompt_messages=[],
+        model="test-model",
+        task_type="general",
+        context_window=2048,
+        max_output_tokens=256,
+        speed="instant",
+        cache_context="context",
+    )
+    payload = SimpleNamespace(
+        message="Explain",
+        use_memory=True,
+        document_id=None,
+        voice_response=False,
+        tutor=SimpleNamespace(model_dump=lambda: {"subject": "Math"}),
+        attachments=[],
+    )
+
+    class FakeCache:
+        async def get(self, key):
+            return None
+
+        async def set(self, key, value, ttl_seconds):
+            return None
+
+    class FailingOrchestrator:
+        async def stream_request(self, *args, **kwargs):
+            raise RuntimeError("provider URL and secret details")
+            yield "never"
+
+    async def prepare(*args, **kwargs):
+        return prepared
+
+    service.orchestrator = FailingOrchestrator()
+    service._prepare = prepare
+    service._cache_key = lambda _prepared, _payload: "cache-key"
+    monkeypatch.setattr("app.services.chat_service.fast_response_cache", FakeCache())
+
+    events = [event async for event in service.stream_send("user-1", "conv-1", payload)]
+
+    error = next(event for event in events if event["type"] == "error")
+    assert error["message"] == "The AI service is temporarily unavailable. Please retry in a moment."
+    assert "secret" not in error["message"]

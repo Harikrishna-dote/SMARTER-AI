@@ -1,6 +1,5 @@
 from collections.abc import Callable
 from typing import Any
-import logging
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
@@ -23,28 +22,22 @@ async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    logger = logging.getLogger(__name__)
     credentials_error = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    logger.info(f"get_current_user: received token: {token[:10]}...")
     try:
         payload = decode_access_token(token)
         user_id = payload.get("sub")
         if not user_id:
-            logger.warning("get_current_user: no user_id in payload")
             raise credentials_error
     except JWTError as exc:
-        logger.warning(f"get_current_user: JWT error: {exc}")
         raise credentials_error from exc
 
     user = await UserRepository(db).get(user_id)
     if not user or not user.is_active:
-        logger.warning(f"get_current_user: user not found or inactive: {user_id}")
         raise credentials_error
-    logger.info(f"get_current_user: success for user: {user_id}")
     return user
 
 

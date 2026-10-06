@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { setActiveConversationId } from '../store/chatSlice';
@@ -14,7 +14,6 @@ import {
   FileUp,
   Image as ImageIcon,
   TextCursorInput,
-  FolderUp,
   Volume2,
   VolumeX,
 } from 'lucide-react';
@@ -35,25 +34,11 @@ const MODES: { value: TeachingMode; label: string }[] = [
   { value: 'translate', label: 'Translate' },
 ];
 
-const SPEEDS: { value: 'instant' | 'balanced' | 'deep'; label: string }[] = [
-  { value: 'instant', label: 'Instant' },
-  { value: 'balanced', label: 'Balanced' },
-  { value: 'deep', label: 'Deep' },
-];
-
 type TutorLanguage = 'English' | 'Telugu' | 'Bilingual';
 
 interface UiMessage extends Message {
   streaming?: boolean;
 }
-
-const directoryInputProps: InputHTMLAttributes<HTMLInputElement> & {
-  webkitdirectory: string;
-  directory: string;
-} = {
-  webkitdirectory: '',
-  directory: '',
-};
 
 function isMessage(value: unknown): value is Message {
   return Boolean(
@@ -92,8 +77,8 @@ export default function Chat() {
   const [tutorLanguage, setTutorLanguage] = useState<TutorLanguage>('English');
   const [voiceOutput, setVoiceOutput] = useState(true);
   const [streaming, setStreaming] = useState(false);
-  const [smartWakeEnabled, setSmartWakeEnabled] = useState(false);
   const [showInputOptions, setShowInputOptions] = useState(false);
+  const [pendingDocumentId, setPendingDocumentId] = useState<string | null>(null);
 
   const speechLanguage = tutorLanguage === 'Telugu' ? 'te' : tutorLanguage === 'Bilingual' ? 'bilingual' : 'en';
   const voice = useVoice(speechLanguage);
@@ -165,6 +150,8 @@ export default function Chat() {
       }
 
       setInput('');
+      const documentId = pendingDocumentId;
+      setPendingDocumentId(null);
       const now = new Date().toISOString();
       const userMsg: UiMessage = {
         id: `local-${Date.now()}`,
@@ -194,6 +181,7 @@ export default function Chat() {
           message: text,
           tutor: { teaching_mode: mode, response_speed: speed, language: tutorLanguage },
           use_memory: true,
+          document_id: documentId ?? undefined,
           voice_response: voiceOutput,
         },
         controller.signal,
@@ -236,7 +224,7 @@ export default function Chat() {
       setStreaming(false);
       abortRef.current = null;
     }
-  }, [input, streaming, activeId, mode, speed, tutorLanguage, voiceOutput, voice, speechLanguage, setParams, toast]);
+  }, [input, streaming, activeId, mode, speed, tutorLanguage, voiceOutput, voice, speechLanguage, pendingDocumentId, setParams, toast]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
@@ -255,18 +243,9 @@ export default function Chat() {
       return;
     }
     voice.startListening(
-      (transcript) => {
-        if (smartWakeEnabled) {
-          void send(transcript);
-          return;
-        }
-        setInput((prev) => (prev ? `${prev} ${transcript}` : transcript));
-      },
-      smartWakeEnabled
-        ? { handsFree: true, wakeWord: 'smart', requireWakeWord: true }
-        : undefined,
+      (transcript) => setInput((prev) => (prev ? `${prev} ${transcript}` : transcript)),
     );
-  }, [recording, send, smartWakeEnabled, toast, voice]);
+  }, [recording, toast, voice]);
 
   const toggleVoiceOutput = useCallback(() => {
     if (voice.speaking) voice.stop();
@@ -278,6 +257,7 @@ export default function Chat() {
       setShowInputOptions(false);
       const doc = await api.uploadDocument(file);
       toast({ title: 'File uploaded', description: `Analysing: ${doc.filename}`, variant: 'info' });
+      setPendingDocumentId(doc.id);
       setInput(`Analyse this document: ${doc.filename}`);
     } catch {
       toast({ title: 'Upload failed', variant: 'error' });
@@ -295,7 +275,7 @@ export default function Chat() {
   }, [toast]);
 
   return (
-    <div className="flex h-full w-full bg-white dark:bg-[#212121]">
+    <div className="flex h-full min-h-0 w-full bg-white dark:bg-[#212121]">
       <section className="flex min-w-0 flex-1 flex-col">
         {/* ChatGPT Style Clean Top Navigation */}
         <div className="flex h-14 items-center justify-between border-b border-black/10 px-4 dark:border-white/10 bg-white dark:bg-[#212121] z-10">
@@ -367,7 +347,7 @@ export default function Chat() {
           </div>
         </div>
 
-        <div ref={scrollRef} className="no-scrollbar flex-1 overflow-y-auto">
+        <div ref={scrollRef} className="no-scrollbar min-h-0 flex-1 overflow-y-auto">
           {messages.length === 0 ? (
             <EmptyThread onPrompt={setInput} />
           ) : (
@@ -385,7 +365,7 @@ export default function Chat() {
         </div>
 
         {/* ChatGPT Style Bottom Input Bar */}
-        <div className="border-t border-transparent bg-white px-4 py-4 dark:bg-[#212121]">
+        <div className="safe-bottom border-t border-transparent bg-white px-3 py-3 sm:px-4 sm:py-4 dark:bg-[#212121]">
           <div className="mx-auto max-w-3xl">
             <div className="relative flex flex-col rounded-2xl border border-black/15 bg-white shadow-lg dark:border-white/15 dark:bg-[#2f3036] px-4 py-3 focus-within:border-emerald-500">
               <textarea
@@ -407,9 +387,10 @@ export default function Chat() {
                   <div className="relative">
                     <button 
                       type="button"
-                      className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/10 transition"
+                      className="grid h-11 w-11 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/10 transition"
                       onClick={() => setShowInputOptions(!showInputOptions)}
                       title="Attach file or image"
+                      aria-label="Attach file or image"
                     >
                       <Plus size={18} />
                     </button>
@@ -418,10 +399,6 @@ export default function Chat() {
                          <label className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer dark:text-slate-200 dark:hover:bg-white/10">
                              <FileUp size={15}/> Upload File
                              <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])} />
-                         </label>
-                         <label className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer dark:text-slate-200 dark:hover:bg-white/10">
-                             <FolderUp size={15}/> Upload Folder
-                             <input type="file" {...directoryInputProps} className="hidden" onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])} />
                          </label>
                          <label className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 cursor-pointer dark:text-slate-200 dark:hover:bg-white/10">
                              <ImageIcon size={15}/> Upload Image
@@ -439,10 +416,11 @@ export default function Chat() {
                     type="button"
                     onClick={toggleVoice}
                     className={cn(
-                      'grid h-8 w-8 place-items-center rounded-lg transition',
+                      'grid h-11 w-11 place-items-center rounded-lg transition',
                       recording ? 'bg-rose-500 text-white animate-pulse' : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/10'
                     )}
                     title={recording ? 'Stop listening' : 'Voice input'}
+                      aria-label={recording ? 'Stop listening' : 'Voice input'}
                   >
                     <Mic size={18} />
                   </button>
@@ -454,7 +432,7 @@ export default function Chat() {
                     <button
                       type="button"
                       onClick={stop}
-                      className="grid h-8 w-8 place-items-center rounded-lg bg-rose-600 text-white transition hover:bg-rose-700"
+                      className="grid h-11 w-11 place-items-center rounded-lg bg-rose-600 text-white transition hover:bg-rose-700"
                       aria-label="Stop generation"
                     >
                       <Square size={14} />
@@ -464,7 +442,7 @@ export default function Chat() {
                       type="button"
                       onClick={() => void send()}
                       disabled={!input.trim()}
-                      className="grid h-8 w-8 place-items-center rounded-lg bg-black text-white hover:opacity-80 disabled:opacity-30 dark:bg-white dark:text-slate-950 transition"
+                      className="grid h-11 w-11 place-items-center rounded-lg bg-black text-white hover:opacity-80 disabled:opacity-30 dark:bg-white dark:text-slate-950 transition"
                       aria-label="Send message"
                     >
                       <Send size={14} />
@@ -477,34 +455,6 @@ export default function Chat() {
         </div>
       </section>
     </div>
-  );
-}
-
-function SegmentButton({
-  active,
-  compact = false,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  compact?: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'focus-ring min-h-9 rounded-md font-medium transition-colors',
-        compact ? 'px-2 text-xs' : 'px-2.5 text-xs',
-        active
-          ? 'bg-emerald-600 text-white'
-          : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-white/10',
-      )}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -618,7 +568,7 @@ function MessageBubble({ message, onCopy, onSpeak }: { message: UiMessage; onCop
                 navigator.clipboard?.writeText(message.content);
                 onCopy();
               }}
-              className="focus-ring grid h-9 w-9 place-items-center rounded-md opacity-0 transition-opacity hover:bg-slate-100 group-hover:opacity-100 dark:hover:bg-white/10"
+              className="focus-ring grid h-9 w-9 place-items-center rounded-md opacity-100 transition-opacity hover:bg-slate-100 sm:opacity-0 sm:group-hover:opacity-100 dark:hover:bg-white/10"
               aria-label="Copy"
               title="Copy"
             >

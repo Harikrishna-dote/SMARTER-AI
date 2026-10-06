@@ -25,7 +25,11 @@ export function Topbar() {
 
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const items = NAV_ITEMS.filter((i) => !i.adminOnly || isAdmin);
+  const items = NAV_ITEMS.filter(
+    (item) =>
+      (!item.adminOnly || isAdmin) &&
+      (!item.roles || (user?.role ? item.roles.includes(user.role) : false)),
+  );
 
   return (
     <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/10 bg-white/40 px-4 py-3 backdrop-blur-xl dark:bg-black/30">

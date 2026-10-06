@@ -811,7 +811,9 @@ export const api = {
     return request<{ role: string }>('PATCH', `/admin/users/${encodeURIComponent(payload.user_id)}/role`, { body: { role: payload.role } });
   },
   async toggleUserActive(payload: ToggleUserActiveRequest): Promise<{ is_active: boolean }> {
-    return request<{ is_active: boolean }>('PATCH', `/admin/users/${encodeURIComponent(payload.user_id)}/active`, { body: { is_active: payload.is_active } });
+    return request<{ is_active: boolean }>('PATCH', `/admin/users/${encodeURIComponent(payload.user_id)}/activate`, {
+      query: { active: payload.is_active },
+    });
   },
   async platformActivity(): Promise<PlatformActivity> {
     return request<PlatformActivity>('GET', '/admin/activity');
@@ -819,13 +821,13 @@ export const api = {
 
   // ----- Students -----
   async listStudents(query?: { search?: string; class_id?: string }): Promise<User[]> {
-    return request<User[]>('GET', '/students', { query });
+    return request<User[]>('GET', '/admin/students', { query });
   },
   async listClasses(): Promise<StudyGroupResponse[]> {
-    return request<StudyGroupResponse[]>('GET', '/classes');
+    return request<StudyGroupResponse[]>('GET', '/admin/classes');
   },
   async getStudentProgress(studentId: string): Promise<StudentProgress> {
-    return request<StudentProgress>('GET', `/students/${encodeURIComponent(studentId)}/progress`);
+    return request<StudentProgress>('GET', `/admin/students/${encodeURIComponent(studentId)}/progress`);
   },
 
   // ----- Roles -----
