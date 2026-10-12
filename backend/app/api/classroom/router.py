@@ -1,5 +1,4 @@
 import asyncio
-from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -9,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.application.orchestrator import AIOrchestrator
 from app.core.database import get_db
 from app.core.deps import get_current_user, get_orchestrator
+from app.core.time import utc_now
 from app.models.user import User
 from app.schemas.classroom import (
     AutonomousSessionRequest,
@@ -512,7 +512,7 @@ async def control_avatar(
         response = {
             "status": "ok",
             "avatar_state": validated.model_dump(exclude_none=True),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utc_now().isoformat(),
         }
         if orchestrator.classroom_service:
             response["hint"] = "Avatar state updated successfully"

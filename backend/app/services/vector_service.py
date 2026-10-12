@@ -21,13 +21,21 @@ logger = logging.getLogger(__name__)
 class VectorService:
     """Optional Qdrant-powered vector search for retrieval augmentation."""
 
-    def __init__(self, settings: Settings, embed_fn: Callable[[str], Any] | None = None):
+    def __init__(
+        self,
+        settings: Settings,
+        embed_fn: Callable[[str], Any] | None = None,
+        availability_fn: Callable[[], bool] | None = None,
+    ):
         self.settings = settings
         self.embed_fn = embed_fn
+        self.availability_fn = availability_fn
         self.collection = settings.qdrant_collection
         self.client = None
         self._memory_points: dict[str, dict[str, Any]] = {}
         self._collection_lock = asyncio.Lock()
+        self._collection_dimension: int | None = None
+        self._dimension_warning_logged = False
         if QdrantClient is not None and settings.qdrant_url:
             try:
                 self.client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None)
@@ -39,7 +47,9 @@ class VectorService:
     def available(self) -> bool:
         # Embeddings plus the local index are enough for development and tests;
         # Qdrant is an optional acceleration and persistence layer.
-        return self.embed_fn is not None
+        if self.embed_fn is None:
+            return False
+        return self.availability_fn() if self.availability_fn is not None else True
 
     async def index_document(
         self,
@@ -55,7 +65,8 @@ class VectorService:
         vector = await self._embed(text)
         if not vector:
             return
-        await self._ensure_collection(len(vector))
+        if not await self._ensure_collection(len(vector)):
+            return
         point_id = self._point_id(document_id, metadata)
         payload = {"text": text, **metadata}
         self._memory_points[point_id] = {"id": point_id, "vector": vector, "payload": payload}
@@ -72,7 +83,8 @@ class VectorService:
         embedding = await self._embed(query)
         if not embedding:
             return []
-        await self._ensure_collection(len(embedding))
+        if not await self._ensure_collection(len(embedding)):
+            return []
         results = await asyncio.to_thread(self._search, embedding, limit, user_id)
         if results or self.client is None:
             return results
@@ -117,15 +129,27 @@ class VectorService:
         suffix = f":{chunk_index}" if chunk_index is not None else ""
         return str(uuid5(NAMESPACE_URL, f"smarter-ai:{document_id}{suffix}"))
 
-    async def _ensure_collection(self, vector_size: int) -> None:
+    async def _ensure_collection(self, vector_size: int) -> bool:
         if self.client is None or qdrant_models is None:
-            return
+            return True
 
         async with self._collection_lock:
             try:
                 existing = await asyncio.to_thread(self.client.get_collection, self.collection)
                 if existing is not None:
-                    return
+                    existing_size = self._collection_vector_size(existing)
+                    if existing_size is not None and existing_size != vector_size:
+                        if not self._dimension_warning_logged:
+                            logger.warning(
+                                "Skipping vector operation for '%s': provider dimension %s does not match collection dimension %s",
+                                self.collection,
+                                vector_size,
+                                existing_size,
+                            )
+                            self._dimension_warning_logged = True
+                        return False
+                    self._collection_dimension = existing_size or vector_size
+                    return True
             except Exception:
                 pass
 
@@ -135,8 +159,24 @@ class VectorService:
                     collection_name=self.collection,
                     vectors=qdrant_models.VectorParams(size=vector_size, distance=qdrant_models.Distance.COSINE),
                 )
+                self._collection_dimension = vector_size
+                return True
             except Exception as exc:
                 logger.warning("Failed to create Qdrant collection '%s': %s", self.collection, exc)
+                return False
+
+    @staticmethod
+    def _collection_vector_size(collection: Any) -> int | None:
+        config = getattr(collection, "config", None)
+        params = getattr(config, "params", None)
+        vectors = getattr(params, "vectors", None)
+        size = getattr(vectors, "size", None)
+        if size is None and isinstance(vectors, dict):
+            size = vectors.get("size")
+        try:
+            return int(size) if size is not None else None
+        except (TypeError, ValueError):
+            return None
 
     def _upsert(self, point_id: str, vector: list[float], payload: dict[str, Any]) -> None:
         if self.client is None or qdrant_models is None:

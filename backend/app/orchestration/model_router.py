@@ -11,9 +11,11 @@ from __future__ import annotations
 import logging
 import re
 import time
+from asyncio import Lock
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -231,6 +233,21 @@ def _clean_model_name(name: str | None) -> str:
     return (name or "").strip()
 
 
+def _is_gemini_model(model_name: str) -> bool:
+    return "gemini" in model_name.lower()
+
+
+def _is_local_model(model_name: str) -> bool:
+    return not _is_gemini_model(model_name)
+
+
+def _ollama_model_name(model_name: str) -> str:
+    """Remove the optional ``ollama:`` routing prefix before provider calls."""
+    if model_name.lower().startswith("ollama:"):
+        return model_name.split(":", 1)[1]
+    return model_name
+
+
 class ModelRegistry:
     def __init__(self, settings: Any | None = None):
         self.settings = settings
@@ -306,9 +323,20 @@ class ModelRegistry:
 
 
 class ModelHealthManager:
-    def __init__(self, cache_ttl_seconds: int = 30, cooldown_seconds: int = 60):
+    def __init__(
+        self,
+        cache_ttl_seconds: int = 30,
+        cooldown_seconds: int = 60,
+        health_timeout_seconds: float = 2.0,
+        connect_timeout_seconds: float = 0.5,
+    ):
         self.cache_ttl_seconds = max(cache_ttl_seconds, 1)
         self.cooldown_seconds = max(cooldown_seconds, 1)
+        self.health_timeout_seconds = max(float(health_timeout_seconds), 0.1)
+        self.connect_timeout_seconds = max(
+            min(float(connect_timeout_seconds), self.health_timeout_seconds),
+            0.1,
+        )
         self.ollama_available = False
         self.last_error: str | None = None
         self._available_names: set[str] = set()
@@ -316,6 +344,9 @@ class ModelHealthManager:
         self._failure_cooldown_until: dict[str, float] = {}
         self._latency_history: dict[str, list[float]] = {}
         self._last_refresh = 0.0
+        self._provider_cooldown_until = 0.0
+        self._refresh_lock = Lock()
+        self._availability_known = False
 
     async def refresh(
         self,
@@ -324,70 +355,92 @@ class ModelHealthManager:
         *,
         force: bool = False,
     ) -> None:
-        now = time.time()
-        if not force and now - self._last_refresh < self.cache_ttl_seconds:
-            return
+        async with self._refresh_lock:
+            now = time.time()
+            if not force and (
+                now - self._last_refresh < self.cache_ttl_seconds
+                or now < self._provider_cooldown_until
+            ):
+                return
 
-        headers = headers or {}
-        available: set[str] = set()
-        loaded: set[str] = set()
-        try:
-            tags_response = await client.get("/api/tags", headers=headers, timeout=httpx.Timeout(5, connect=2))
-            tags_response.raise_for_status()
-            tags_data = tags_response.json()
-            models_list = tags_data.get("models")
-            if isinstance(models_list, list):
-                for item in models_list:
-                    if not isinstance(item, dict):
-                        continue
-                    model_name = item.get("name") or item.get("model")
-                    if model_name:
-                        available.add(str(model_name))
-
+            headers = headers or {}
+            available: set[str] = set()
+            loaded: set[str] = set()
+            timeout = httpx.Timeout(
+                self.health_timeout_seconds,
+                connect=self.connect_timeout_seconds,
+            )
+            previous_available = self.ollama_available
             try:
-                ps_response = await client.get("/api/ps", headers=headers, timeout=httpx.Timeout(5, connect=2))
-                ps_response.raise_for_status()
-                ps_data = ps_response.json()
-                ps_models = ps_data.get("models")
-                if isinstance(ps_models, list):
-                    for item in ps_models:
+                tags_response = await client.get("/api/tags", headers=headers, timeout=timeout)
+                tags_response.raise_for_status()
+                tags_data = tags_response.json()
+                models_list = tags_data.get("models")
+                if isinstance(models_list, list):
+                    for item in models_list:
                         if not isinstance(item, dict):
                             continue
                         model_name = item.get("name") or item.get("model")
                         if model_name:
-                            loaded.add(str(model_name))
-            except httpx.HTTPError as exc:
-                logger.debug("Ollama /api/ps unavailable; continuing with tags only: %s", exc)
+                            available.add(str(model_name))
 
-            self.ollama_available = True
-            self.last_error = None
-            self._available_names = available
-            self._loaded_names = loaded
-        except Exception as exc:
-            self.ollama_available = False
-            self.last_error = str(exc)
-            self._available_names = set()
-            self._loaded_names = set()
-        finally:
-            self._last_refresh = now
+                try:
+                    ps_response = await client.get("/api/ps", headers=headers, timeout=timeout)
+                    ps_response.raise_for_status()
+                    ps_data = ps_response.json()
+                    ps_models = ps_data.get("models")
+                    if isinstance(ps_models, list):
+                        for item in ps_models:
+                            if not isinstance(item, dict):
+                                continue
+                            model_name = item.get("name") or item.get("model")
+                            if model_name:
+                                loaded.add(str(model_name))
+                except httpx.HTTPError as exc:
+                    logger.debug("Ollama /api/ps unavailable; continuing with tags only: %s", exc)
+
+                self.ollama_available = True
+                self.last_error = None
+                self._available_names = available
+                self._loaded_names = loaded
+                self._provider_cooldown_until = 0.0
+                if self._availability_known and not previous_available:
+                    logger.info("Ollama provider is available again")
+                self._availability_known = True
+            except Exception as exc:
+                self.ollama_available = False
+                self.last_error = str(exc)
+                self._available_names = set()
+                self._loaded_names = set()
+                self._provider_cooldown_until = now + self.cooldown_seconds
+                if not self._availability_known or previous_available:
+                    logger.warning(
+                        "Ollama provider unavailable; local optional features will be skipped: %s",
+                        exc,
+                    )
+                self._availability_known = True
+            finally:
+                self._last_refresh = now
 
     def resolve_model_name(self, model_name: str) -> str | None:
-        if model_name in self._available_names:
-            return model_name
-        if ":" not in model_name:
-            latest = f"{model_name}:latest"
+        normalized = _ollama_model_name(model_name)
+        if normalized in self._available_names:
+            return normalized
+        if ":" not in normalized:
+            latest = f"{normalized}:latest"
             if latest in self._available_names:
                 return latest
             for available in sorted(self._available_names):
-                if available.startswith(f"{model_name}:"):
+                if available.startswith(f"{normalized}:"):
                     return available
         return None
 
     def status_for(self, model_name: str) -> ModelHealth:
         now = time.time()
-        if self._failure_cooldown_until.get(model_name, 0) > now:
+        normalized = _ollama_model_name(model_name)
+        if self._failure_cooldown_until.get(normalized, 0) > now:
             return ModelHealth.UNHEALTHY
-        resolved = self.resolve_model_name(model_name)
+        resolved = self.resolve_model_name(normalized)
         if resolved and resolved in self._loaded_names:
             return ModelHealth.LOADED
         if resolved:
@@ -410,8 +463,12 @@ class ModelHealthManager:
             if len(history) > 20:
                 del history[0]
 
-    def mark_failure(self, model_name: str) -> None:
-        self._failure_cooldown_until[model_name] = time.time() + self.cooldown_seconds
+    def mark_failure(self, model_name: str) -> bool:
+        normalized = _ollama_model_name(model_name)
+        now = time.time()
+        first_failure = self._failure_cooldown_until.get(normalized, 0) <= now
+        self._failure_cooldown_until[normalized] = now + self.cooldown_seconds
+        return first_failure
 
     def average_latency(self, model_name: str) -> float | None:
         history = self._latency_history.get(model_name, [])
@@ -473,17 +530,50 @@ class ModelLifecycleManager:
 
 
 class ModelRouter:
+    _shared_health: dict[int, tuple[Any, ModelHealthManager]] = {}
+
     def __init__(self, settings: Any | None = None):
         self.settings = settings
         self.registry = ModelRegistry(settings)
-        self.health = ModelHealthManager(
-            cache_ttl_seconds=int(_setting(settings, "model_health_cache_ttl_seconds", 30)),
-            cooldown_seconds=int(_setting(settings, "model_unhealthy_cooldown_seconds", 60)),
-        )
+        if settings is None:
+            self.health = ModelHealthManager()
+        else:
+            settings_key = id(settings)
+            cached = self._shared_health.get(settings_key)
+            if cached is None or cached[0] is not settings:
+                self.health = ModelHealthManager(
+                    cache_ttl_seconds=int(_setting(settings, "model_health_cache_ttl_seconds", 30)),
+                    cooldown_seconds=int(_setting(settings, "model_unhealthy_cooldown_seconds", 60)),
+                    health_timeout_seconds=float(_setting(settings, "ollama_health_timeout_seconds", 2.0)),
+                    connect_timeout_seconds=float(_setting(settings, "ollama_connect_timeout_seconds", 0.5)),
+                )
+                self._shared_health[settings_key] = (settings, self.health)
+            else:
+                self.health = cached[1]
         self.lifecycle = ModelLifecycleManager(
             idle_release_seconds=int(_setting(settings, "ollama_idle_model_ttl_seconds", 600)),
             release_idle_models=bool(_setting(settings, "ollama_release_idle_models", False)),
         )
+
+    @property
+    def local_provider_enabled(self) -> bool:
+        if self.settings is None:
+            return True
+        if not bool(_setting(self.settings, "ollama_enabled", True)):
+            return False
+        base_url = str(_setting(self.settings, "ollama_base_url", "")).strip()
+        if not base_url:
+            return False
+        environment = str(_setting(self.settings, "environment", "development")).lower()
+        allow_local = bool(_setting(self.settings, "ollama_allow_local_in_production", False))
+        host = (urlparse(base_url).hostname or "").lower()
+        if environment in {"production", "prod"} and host in {"localhost", "127.0.0.1", "::1"} and not allow_local:
+            return False
+        return True
+
+    @staticmethod
+    def is_local_model(model_name: str) -> bool:
+        return _is_local_model(model_name)
 
     def classify(
         self,
@@ -557,11 +647,17 @@ class ModelRouter:
         )
         primary = _clean_model_name(requested_model) or self.registry.primary_for_task(profile.task_type)
         fallback_chain = self.registry.fallback_chain(primary, task_type=profile.task_type)
-        spec = self.registry.get(primary)
+        selected = primary
+        if not self.local_provider_enabled:
+            selected = next(
+                (model_name for model_name in fallback_chain if not self.is_local_model(model_name)),
+                primary,
+            )
+        spec = self.registry.get(selected) or self.registry.get(primary)
         context_size = spec.context_size if spec else int(_setting(self.settings, "ollama_context_window", 32768))
         return ModelRoute(
             requested_model=primary,
-            selected_model=primary,
+            selected_model=selected,
             candidate_models=fallback_chain,
             fallback_chain=fallback_chain,
             task_type=profile.task_type,
@@ -583,7 +679,6 @@ class ModelRouter:
         attachments: list[Any] | None = None,
         require_available: bool = True,
     ) -> ModelRoute:
-        await self.health.refresh(client, headers)
         planned = self.plan_route(
             messages,
             requested_model=requested_model,
@@ -591,10 +686,15 @@ class ModelRouter:
             latency_preference=latency_preference,
             attachments=attachments,
         )
+        if self.local_provider_enabled and any(self.is_local_model(model) for model in planned.fallback_chain):
+            await self.health.refresh(client, headers)
 
         health_status = {model: self.health.status_for(model).value for model in planned.fallback_chain}
         candidate_models: list[str] = []
         for model_name in planned.fallback_chain:
+            if self.is_local_model(model_name) and not self.local_provider_enabled:
+                health_status[model_name] = ModelHealth.DISABLED.value
+                continue
             spec = self.registry.get(model_name)
             if spec is not None and not spec.enabled:
                 health_status[model_name] = ModelHealth.DISABLED.value
@@ -607,7 +707,11 @@ class ModelRouter:
             enabled_chain = [
                 model_name
                 for model_name in planned.fallback_chain
-                if (self.registry.get(model_name) is None or self.registry.get(model_name).enabled)
+                if not (
+                    self.is_local_model(model_name)
+                    and not self.local_provider_enabled
+                )
+                and (self.registry.get(model_name) is None or self.registry.get(model_name).enabled)
             ]
             # If any model in the chain is Gemini, we don't strictly require Ollama availability
             gemini_in_chain = any("gemini" in model.lower() for model in enabled_chain)
@@ -637,7 +741,8 @@ class ModelRouter:
         )
 
     async def health_snapshot(self, client: httpx.AsyncClient, headers: dict[str, str]) -> dict[str, Any]:
-        await self.health.refresh(client, headers, force=True)
+        if self.local_provider_enabled:
+            await self.health.refresh(client, headers, force=True)
         return self.health.snapshot(self.registry)
 
     @staticmethod

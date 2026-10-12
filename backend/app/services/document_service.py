@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.models.document import Document
 from app.repositories.documents import DocumentRepository
-from app.services.ai_gateway import AIGateway
+from app.services.ai_gateway import AIGateway, get_shared_gateway
 from app.services.memory_service import MemoryService
 
 
@@ -32,7 +32,7 @@ class DocumentService:
 
     def __init__(self, db: AsyncSession, gateway: AIGateway | None = None, vector_service: Any | None = None):
         self.repo = DocumentRepository(db)
-        self.gateway = gateway or AIGateway()
+        self.gateway = gateway or get_shared_gateway()
         self.vector_service = vector_service
         self.settings = get_settings()
 

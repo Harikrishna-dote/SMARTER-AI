@@ -1,6 +1,7 @@
 import os
 import sys
 import wave
+import logging
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,27 @@ def test_piper_asset_paths_resolve_from_backend_root():
 
     assert resolved.is_absolute()
     assert resolved.exists()
+
+
+def test_missing_piper_models_are_unavailable_and_warn_once(tmp_path, caplog):
+    settings = type("Settings", (), {
+        "piper_model_path": str(tmp_path / "te.onnx"),
+        "piper_config_path": str(tmp_path / "te.onnx.json"),
+        "piper_model_path_en": str(tmp_path / "en.onnx"),
+        "piper_config_path_en": str(tmp_path / "en.onnx.json"),
+        "voice_tts_provider": "piper",
+        "voice_allow_model_download": False,
+        "parler_tts_model": "not-loaded",
+        "voice_temp_dir": str(tmp_path),
+    })()
+
+    with caplog.at_level(logging.WARNING):
+        first = TTSEngine(settings)
+        second = TTSEngine(settings)
+
+    assert first.available is False
+    assert second.available is False
+    assert sum("Piper model not found" in record.message for record in caplog.records) == 2
 
 
 def test_tts_rate_adjustment_changes_valid_wav_duration(tmp_path):

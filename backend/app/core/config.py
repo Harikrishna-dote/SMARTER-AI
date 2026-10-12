@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     )
     ollama_base_url: str = "http://localhost:11434"
     ollama_api_key: str = ""
+    ollama_enabled: bool = True
+    ollama_allow_local_in_production: bool = False
+    ollama_health_timeout_seconds: float = 2.0
+    ollama_connect_timeout_seconds: float = 0.5
 
     # Defined priority chains: [primary_model, fallback_1, fallback_2, ...]
     # Primary can be 'gemini-2.5-flash', 'ollama:model_name', etc.
@@ -64,6 +68,9 @@ class Settings(BaseSettings):
     model_router_fallbacks: dict[str, list[str] | str] = Field(default_factory=dict)
     model_health_cache_ttl_seconds: int = 30
     model_unhealthy_cooldown_seconds: int = 60
+    max_parallel_agent_tasks: int = 4
+    embedding_enabled: bool = True
+    embedding_provider: str = "ollama"
     ollama_release_idle_models: bool = False
     ollama_idle_model_ttl_seconds: int = 600
     redis_url: str = "redis://localhost:6379/0"
@@ -74,6 +81,7 @@ class Settings(BaseSettings):
     voice_stt_model_name: str = "models/faster-whisper-medium"
     voice_stt_device: str = "auto"
     voice_tts_provider: str = "piper"
+    voice_allow_model_download: bool = False
     piper_model_path: str = "models/te/te_IN/padmavathi/medium/te_IN-padmavathi-medium.onnx"
     piper_config_path: str = "models/te/te_IN/padmavathi/medium/te_IN-padmavathi-medium.onnx.json"
     piper_model_path_en: str = "models/en/en_US/ryan/medium/en_US-ryan-medium.onnx"

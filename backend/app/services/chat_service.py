@@ -6,7 +6,6 @@ import re
 import time
 from collections import Counter
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any, AsyncIterator
 
 import httpx
@@ -18,8 +17,9 @@ from app.repositories.chats import ConversationRepository, MessageRepository
 from app.repositories.documents import DocumentRepository
 from app.schemas.chat import ChatRequest
 from app.core.cache import fast_response_cache
+from app.core.time import utc_now_naive
 from app.orchestration.orchestrator import AIOrchestrator
-from app.services.ai_gateway import AIGateway
+from app.services.ai_gateway import AIGateway, get_shared_gateway
 from app.services.memory_service import MemoryService
 from app.services.tutor_service import build_attachment_context, build_tutor_system_prompt
 from app.services.wake_word import extract_wake_command
@@ -90,7 +90,7 @@ class ChatService:
         self.messages = MessageRepository(db)
         self.documents = DocumentRepository(db)
         self.memory = MemoryService(db)
-        self.gateway = gateway or AIGateway()
+        self.gateway = gateway or get_shared_gateway()
         self.orchestrator = orchestrator or AIOrchestrator(self.gateway)
         self.vector_service = vector_service
 
@@ -363,7 +363,7 @@ class ChatService:
             {"role": message.role, "content": message.content}
             for message in selected_history
         )
-        conversation.updated_at = datetime.utcnow()
+        conversation.updated_at = utc_now_naive()
         await self.db.flush()
         return PreparedChat(
             conversation=conversation,
@@ -582,7 +582,7 @@ class ChatService:
             metadata_=metadata,
         )
         self.db.add(assistant_message)
-        prepared.conversation.updated_at = datetime.utcnow()
+        prepared.conversation.updated_at = utc_now_naive()
         await self.db.commit()
         await self.db.refresh(assistant_message)
         return assistant_message

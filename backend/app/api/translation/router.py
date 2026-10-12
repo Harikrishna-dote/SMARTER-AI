@@ -5,6 +5,7 @@ from app.application.language_learning_engine import LanguageLearningEngine
 from app.application.orchestrator import AIOrchestrator
 from app.core.database import get_db
 from app.core.deps import get_current_user, get_orchestrator
+from app.core.time import utc_now_naive
 from app.models.user import User
 from app.schemas.translation import (
     AnalysisRequest,
@@ -451,7 +452,7 @@ async def save_quiz(
         score=score,
         total=total,
         completed=completed,
-        completed_at=datetime.utcnow() if completed else None,
+        completed_at=utc_now_naive() if completed else None,
     )
     saved = await orchestrator.translation_engine.save_quiz(current_user.id, quiz, db)
     return QuizResponse(

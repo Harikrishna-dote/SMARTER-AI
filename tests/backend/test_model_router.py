@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from app.orchestration.model_router import ModelRouter, ModelRoutingError
+from app.orchestration.model_router import ModelHealthManager, ModelRouter, ModelRoutingError
 
 
 class _Response:
@@ -86,3 +86,43 @@ def test_embedding_route_does_not_fall_back_to_chat_models():
     )
 
     assert route.fallback_chain == ("nomic-embed-text:latest",)
+
+
+@pytest.mark.asyncio
+async def test_production_loopback_ollama_is_skipped_when_gemini_is_configured():
+    settings = SimpleNamespace(
+        environment="production",
+        ollama_base_url="http://127.0.0.1:11434",
+        ollama_allow_local_in_production=False,
+        ollama_enabled=True,
+        model_fallback_chains={"general": ["gemini-2.0-flash", "ollama:smarter-qwen3:4b"]},
+    )
+    router = ModelRouter(settings)
+
+    class NoNetworkClient:
+        async def get(self, *_args, **_kwargs):
+            raise AssertionError("production routing must not probe local Ollama")
+
+    route = await router.select_route(NoNetworkClient(), {}, [{"role": "user", "content": "Hello"}])
+
+    assert route.selected_model == "gemini-2.0-flash"
+    assert route.candidate_models == ("gemini-2.0-flash",)
+
+
+@pytest.mark.asyncio
+async def test_failed_health_probe_is_cooled_down_and_not_repeated():
+    health = ModelHealthManager(cache_ttl_seconds=1, cooldown_seconds=60)
+    calls = 0
+
+    class OfflineClient:
+        async def get(self, *_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+            raise httpx.ConnectError("offline")
+
+    client = OfflineClient()
+    await health.refresh(client, {})
+    await health.refresh(client, {})
+
+    assert calls == 1
+    assert health.ollama_available is False

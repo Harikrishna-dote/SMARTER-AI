@@ -48,6 +48,54 @@ async def test_orchestrator_reports_independent_multi_agent_results():
     assert result["results"]["voice"]["status"] == "failed"
 
 
+@pytest.mark.asyncio
+async def test_database_agents_receive_distinct_sessions():
+    orchestrator = AIOrchestrator.__new__(AIOrchestrator)
+    orchestrator.user_id = "student-1"
+    orchestrator.settings = type("Settings", (), {"max_parallel_agent_tasks": 4})()
+    orchestrator._agents = {}
+    sessions = []
+
+    class Session:
+        async def __aenter__(self):
+            sessions.append(self)
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def rollback(self):
+            return None
+
+    class SessionFactory:
+        def __call__(self):
+            return Session()
+
+    class Scoped:
+        def __init__(self, session):
+            self.session = session
+
+        async def run_agent(self, name, payload):
+            return {"name": name, "session": self.session}
+
+    def scoped_for_session(session):
+        return Scoped(session)
+
+    orchestrator._scoped_for_session = scoped_for_session
+    orchestrator.session_factory = SessionFactory()
+
+    result = await orchestrator.run_multi_agent([
+        {"id": "memory-a", "agent": "memory", "payload": {}},
+        {"id": "memory-b", "agent": "memory", "payload": {}},
+    ])
+
+    assert result["status"] == "completed"
+    assert len(sessions) == 2
+    assert sessions[0] is not sessions[1]
+    assert result["results"]["memory-a"]["output"]["session"] in sessions
+    assert result["results"]["memory-b"]["output"]["session"] in sessions
+
+
 class _BrainAgent:
     def __init__(self, name: str):
         self.name = name

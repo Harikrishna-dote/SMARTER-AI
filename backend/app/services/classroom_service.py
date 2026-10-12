@@ -32,7 +32,7 @@ from app.schemas.classroom import (
     ProgressUpdate,
     QuizQuestion,
 )
-from app.services.ai_gateway import AIGateway
+from app.services.ai_gateway import AIGateway, get_shared_gateway
 from app.services.knowledge_graph_service import KnowledgeGraphService
 from app.services.memory_service import MemoryService
 
@@ -138,7 +138,7 @@ async def _generate_json(gateway: AIGateway, system: str, user: str, fallback: d
 class ClassroomService:
     def __init__(self, db: AsyncSession, gateway: AIGateway | None = None):
         self.db = db
-        self.gateway = gateway or AIGateway()
+        self.gateway = gateway or get_shared_gateway()
         self.kg = KnowledgeGraphService()
         self.tutor_orchestrator = TutorBrain(db, self.gateway)
 

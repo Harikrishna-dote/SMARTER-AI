@@ -379,6 +379,9 @@ class STTEngine:
 class TTSEngine:
     """Multilingual TTS engine with Piper (local) and Parler (Indic fallback)."""
 
+    _piper_cache: dict[tuple[str, str], Any | None] = {}
+    _piper_warning_keys: set[tuple[str, str]] = set()
+
     def __init__(self, settings: Any, cache: Any | None = None) -> None:
         self.settings = settings
         self.cache = cache
@@ -398,24 +401,41 @@ class TTSEngine:
             return None
         resolved_model_path = cls._resolve_asset_path(model_path)
         resolved_config_path = cls._resolve_asset_path(config_path)
+        cache_key = (str(resolved_model_path), str(resolved_config_path))
+        if cache_key in cls._piper_cache:
+            return cls._piper_cache[cache_key]
         if not resolved_model_path.exists() or not resolved_config_path.exists():
-            logger.warning("Piper model not found: %s / %s", resolved_model_path, resolved_config_path)
+            if cache_key not in cls._piper_warning_keys:
+                logger.warning("Piper model not found: %s / %s", resolved_model_path, resolved_config_path)
+                cls._piper_warning_keys.add(cache_key)
+            cls._piper_cache[cache_key] = None
             return None
         try:
-            return PiperVoice.load(str(resolved_model_path), config_path=str(resolved_config_path))
+            voice = PiperVoice.load(str(resolved_model_path), config_path=str(resolved_config_path))
+            cls._piper_cache[cache_key] = voice
+            return voice
         except Exception as exc:
-            logger.warning("Failed to load Piper model %s: %s", resolved_model_path, exc)
+            if cache_key not in cls._piper_warning_keys:
+                logger.warning("Failed to load Piper model %s: %s", resolved_model_path, exc)
+                cls._piper_warning_keys.add(cache_key)
+            cls._piper_cache[cache_key] = None
             return None
 
     @property
     def available(self) -> bool:
-        return self._piper_te is not None or self._piper_en is not None or ParlerTTSForConditionalGeneration is not None
+        if self._piper_te is not None or self._piper_en is not None:
+            return True
+        return self._parler_model is not None and self._parler_tokenizer is not None
 
     def _load_parler(self) -> None:
         if self._parler_model is not None and self._parler_tokenizer is not None:
             return
         if ParlerTTSForConditionalGeneration is None or AutoTokenizer is None:
             raise RuntimeError("Parler TTS is not available in this runtime.")
+        if not bool(getattr(self.settings, "voice_allow_model_download", False)):
+            raise RuntimeError(
+                "The configured fallback TTS model is not loaded; enable it explicitly after provisioning the model."
+            )
 
         logger.info("Loading Parler TTS model: %s", self.settings.parler_tts_model)
         self._parler_model = ParlerTTSForConditionalGeneration.from_pretrained(self.settings.parler_tts_model)
@@ -475,7 +495,11 @@ class TTSEngine:
                 Path(output_path).write_bytes(cached)
                 return
 
-        if language == "te" and self._piper_te is not None:
+        provider = str(getattr(self.settings, "voice_tts_provider", "piper")).strip().lower()
+        if provider == "parler":
+            self._load_parler()
+            self._synthesize_parler(text, output_path, language)
+        elif language == "te" and self._piper_te is not None:
             self._synthesize_piper(text, output_path, self._piper_te)
         elif language == "en" and self._piper_en is not None:
             self._synthesize_piper(text, output_path, self._piper_en)
@@ -483,7 +507,12 @@ class TTSEngine:
             self._synthesize_piper(text, output_path, self._piper_te)
         elif self._piper_en is not None:
             self._synthesize_piper(text, output_path, self._piper_en)
+        elif provider in {"auto", "piper"} and (self._piper_te is not None or self._piper_en is not None):
+            voice = self._piper_te or self._piper_en
+            self._synthesize_piper(text, output_path, voice)
         else:
+            if provider == "piper":
+                raise RuntimeError("Piper TTS is unavailable because its voice model files are not provisioned.")
             self._load_parler()
             self._synthesize_parler(text, output_path, language)
 
@@ -732,6 +761,11 @@ class VoiceService:
     async def synthesize(self, text: str, language: str | None = None, rate: float = 1.0) -> str:
         if not text or not text.strip():
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Text is required")
+        if not self.tts.available:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Text-to-speech is unavailable because no configured voice provider is ready.",
+            )
 
         output_file = str(self.temp_dir / f"{uuid.uuid4()}.wav")
         segments = LanguageDetector.segment(text)
@@ -761,6 +795,12 @@ class VoiceService:
     async def synthesize_stream(self, text: str, language: str | None = None, rate: float = 1.0) -> AsyncIterator[dict[str, Any]]:
         if not text or not text.strip():
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Text is required")
+        if not self.tts.available:
+            yield {
+                "type": "error",
+                "message": "Text-to-speech is unavailable because no configured voice provider is ready.",
+            }
+            return
 
         for event in self.tts.synthesize_stream(text, language):
             if event.get("type") == "audio":

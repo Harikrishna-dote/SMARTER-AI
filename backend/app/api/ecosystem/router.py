@@ -4,6 +4,7 @@ from sqlalchemy import select, func
 
 from app.services.code_executor_service import CodeExecutorService
 from app.core.deps import get_current_user, get_db
+from app.core.time import utc_now_naive
 from app.models.ecosystem import (
     CalendarEvent,
     CodingSession,
@@ -487,7 +488,7 @@ async def mark_notification_read(
     if not notification:
         raise HTTPException(status_code=404, detail="Notification not found")
     notification.is_read = True
-    notification.read_at = datetime.utcnow()
+    notification.read_at = utc_now_naive()
     await db.commit()
     return {"read": True}
 
@@ -501,7 +502,7 @@ async def mark_all_notifications_read(
     notifications = result.scalars().all()
     for notification in notifications:
         notification.is_read = True
-        notification.read_at = datetime.utcnow()
+        notification.read_at = utc_now_naive()
     await db.commit()
     return {"updated": len(notifications)}
 

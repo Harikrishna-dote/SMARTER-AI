@@ -35,6 +35,12 @@ class OllamaProvider:
             return {"Authorization": f"Bearer {self.settings.ollama_api_key}"}
         return {}
 
+    async def close(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+        self._client = None
+        self._client_base_url = None
+
     def _payload(
         self,
         messages: list[dict[str, str]],

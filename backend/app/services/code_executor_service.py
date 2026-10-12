@@ -1,7 +1,8 @@
-import subprocess
-import tempfile
-import os
+import asyncio
 import logging
+import os
+import sys
+import tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -17,21 +18,25 @@ class CodeExecutorService:
             filename = f.name
         
         try:
-            # Run with a 5-second timeout
-            result = subprocess.run(
-                ["python", filename],
-                capture_output=True,
-                text=True,
-                timeout=5
+            process = await asyncio.create_subprocess_exec(
+                sys.executable,
+                filename,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
+            try:
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=5)
+            except TimeoutError:
+                process.kill()
+                await process.communicate()
+                return {"output": "", "errors": ["Execution timed out (5s limit)"]}
+
             return {
-                "output": result.stdout,
-                "errors": [result.stderr] if result.stderr else []
+                "output": stdout.decode(errors="replace"),
+                "errors": [stderr.decode(errors="replace")] if stderr else [],
             }
-        except subprocess.TimeoutExpired:
-            return {"output": "", "errors": ["Execution timed out (5s limit)"]}
         except Exception as e:
-            logger.error(f"Code execution error: {e}")
+            logger.exception("Code execution error: %s", e)
             return {"output": "", "errors": [str(e)]}
         finally:
             if os.path.exists(filename):

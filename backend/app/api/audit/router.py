@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.deps import require_admin, get_current_user
+from app.core.time import utc_now_naive
 from app.models.audit import AuditLog, SecurityEvent
 from app.models.user import User
 
@@ -26,7 +27,7 @@ async def list_audit_logs(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = utc_now_naive() - timedelta(days=days)
     query = select(AuditLog).where(AuditLog.created_at >= cutoff)
     if user_id:
         query = query.where(AuditLog.user_id == user_id)
@@ -67,7 +68,7 @@ async def list_security_events(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    cutoff = utc_now_naive() - timedelta(days=days)
     query = select(SecurityEvent).where(SecurityEvent.created_at >= cutoff)
     if severity:
         query = query.where(SecurityEvent.severity == severity)

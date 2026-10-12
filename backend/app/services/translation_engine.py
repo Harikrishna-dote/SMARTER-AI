@@ -57,7 +57,7 @@ from app.schemas.translation import (
     VocabularyItemResponse,
     WordAnalysis,
 )
-from app.services.ai_gateway import AIGateway
+from app.services.ai_gateway import AIGateway, get_shared_gateway
 from app.services.vision_service import VisionService
 
 
@@ -241,7 +241,7 @@ def _clean_json(raw: str) -> dict[str, Any]:
 class TranslationEngine:
     def __init__(self, session: AsyncSession | None = None, gateway: AIGateway | None = None):
         self.session = session
-        self.gateway = gateway or AIGateway()
+        self.gateway = gateway or get_shared_gateway()
 
     @staticmethod
     def validate_language(code: str, *, allow_auto: bool = False) -> str:

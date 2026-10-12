@@ -26,7 +26,7 @@ from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.models.user import User
 from app.models.settings import UserSettings
 from app.security.password import hash_password
-from app.services.ai_gateway import AIGateway, close_gateway_clients
+from app.services.ai_gateway import close_gateway_clients, get_shared_gateway
 
 
 settings = get_settings()
@@ -117,7 +117,7 @@ async def lifespan(app: FastAPI):
             await conn.run_sync(Base.metadata.create_all)
     await retire_default_admin_account()
     await ensure_default_admin()
-    warmup_task = asyncio.create_task(AIGateway().warmup())
+    warmup_task = asyncio.create_task(get_shared_gateway().warmup())
     plugin_manager = PluginManager(app=app, plugins_dir=settings.plugins_directory)
     app.state.plugin_manager = plugin_manager
     try:

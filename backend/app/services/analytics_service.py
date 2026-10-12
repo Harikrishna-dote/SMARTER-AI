@@ -1,9 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.time import utc_now_naive
 from app.models.chat import Conversation, Message
 from app.models.classroom import ClassroomProgress
 from app.models.ecosystem import CalendarEvent, CodingSession, InterviewSession, Notification, Project, StudyGroup, StudyGroupMember
@@ -15,7 +16,7 @@ class AnalyticsService:
         self.db = db
 
     async def get_learning_trends(self, days: int = 30) -> dict[str, Any]:
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = utc_now_naive() - timedelta(days=days)
         result = await self.db.execute(
             select(func.date(Conversation.created_at), func.count(Conversation.id))
             .where(Conversation.created_at >= cutoff)

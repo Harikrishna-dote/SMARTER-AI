@@ -24,15 +24,18 @@ Agents
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 from collections.abc import AsyncIterator
+from contextlib import suppress
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.database import AsyncSessionLocal
 from app.orchestration.orchestrator import AIOrchestrator as ModelExecutionOrchestrator
-from app.services.ai_gateway import AIGateway
+from app.services.ai_gateway import AIGateway, get_shared_gateway
 from app.services.agent_service import AgentService
 from app.services.chat_service import ChatService
 from app.services.classroom_service import ClassroomService
@@ -73,13 +76,30 @@ class AIOrchestrator:
     so no service can bypass the orchestrator to call a model directly.
     """
 
-    def __init__(self, db: AsyncSession, user_id: str | None = None) -> None:
+    _DATABASE_AGENTS = {
+        "lesson_planner",
+        "tutor",
+        "memory",
+        "translation",
+        "progress",
+        "recommendation",
+        "analytics",
+    }
+
+    def __init__(
+        self,
+        db: AsyncSession,
+        user_id: str | None = None,
+        *,
+        session_factory: Any = AsyncSessionLocal,
+    ) -> None:
         self.db = db
         self.user_id = user_id
+        self.session_factory = session_factory
         self.settings = get_settings()
 
         # Core AI gateway (Ollama primary, Gemini fallback)
-        self.gateway = AIGateway()
+        self.gateway = get_shared_gateway()
         self.model_orchestrator = ModelExecutionOrchestrator(self.gateway)
 
         # Knowledge graph for prerequisite validation
@@ -87,7 +107,11 @@ class AIOrchestrator:
 
         # Owned services – all AI calls go through these instances
         self.memory_service = MemoryService(db)
-        self.vector_service = VectorService(self.settings, embed_fn=self.embed)
+        self.vector_service = VectorService(
+            self.settings,
+            embed_fn=self.embed,
+            availability_fn=self.embedding_available,
+        )
         self.classroom_service = ClassroomService(db, gateway=self.gateway)
         self.chat_service = ChatService(
             db,
@@ -185,6 +209,9 @@ class AIOrchestrator:
         """Return an embedding vector for the given text."""
         return await self.gateway.embed(text)
 
+    def embedding_available(self) -> bool:
+        return self.gateway.embedding_available()
+
     # ------------------------------------------------------------------
     # Agent coordination
     # ------------------------------------------------------------------
@@ -196,10 +223,75 @@ class AIOrchestrator:
             raise ValueError(f"Unknown orchestrator agent: {agent_name}")
         return await agent.execute(self.user_id, payload)
 
+    def _scoped_for_session(self, db: AsyncSession) -> "AIOrchestrator":
+        """Create a lightweight agent view with services bound to ``db``.
+
+        Provider clients, routing health, vector storage and stateless services
+        remain shared. Only services that can touch SQLAlchemy are rebound.
+        """
+        scoped = copy.copy(self)
+        scoped.db = db
+        scoped.memory_service = MemoryService(db)
+        scoped.classroom_service = ClassroomService(db, gateway=self.gateway)
+        scoped.chat_service = ChatService(
+            db,
+            gateway=self.gateway,
+            orchestrator=self.model_orchestrator,
+            vector_service=self.vector_service,
+        )
+        scoped.document_service = DocumentService(db, gateway=scoped, vector_service=self.vector_service)
+        scoped.translation_engine = TranslationEngine(db, gateway=scoped)
+        scoped.agent_service = AgentService(db, gateway=scoped)
+        scoped._agents = {
+            agent.name: agent(scoped)
+            for agent in [
+                LessonPlannerAgent,
+                TutorAgent,
+                MemoryAgent,
+                VoiceAgent,
+                TranslationAgent,
+                OCRAgent,
+                RAGAgent,
+                NotesAgent,
+                QuizAgent,
+                HomeworkAgent,
+                ProgressAgent,
+                RecommendationAgent,
+                AnalyticsAgent,
+            ]
+        }
+        scoped.brain = AIBrainAdapter(scoped)
+        return scoped
+
+    async def _run_agent_isolated(
+        self,
+        agent_name: str,
+        payload: dict[str, Any],
+    ) -> Any:
+        session_factory = getattr(self, "session_factory", None)
+        if agent_name not in self._DATABASE_AGENTS or not session_factory:
+            return await self.run_agent(agent_name, payload)
+
+        async with session_factory() as session:
+            scoped = self._scoped_for_session(session)
+            try:
+                return await scoped.run_agent(agent_name, payload)
+            except BaseException:
+                with suppress(Exception, asyncio.CancelledError):
+                    await session.rollback()
+                raise
+
     async def run_parallel(self, tasks: list[tuple[str, dict[str, Any]]]) -> list[Any]:
         """Execute multiple agents concurrently and return their results."""
+        settings = getattr(self, "settings", None)
+        semaphore = asyncio.Semaphore(max(1, int(getattr(settings, "max_parallel_agent_tasks", 4))))
+
+        async def execute(name: str, payload: dict[str, Any]) -> Any:
+            async with semaphore:
+                return await self._run_agent_isolated(name, payload)
+
         return await asyncio.gather(
-            *(self.run_agent(name, payload) for name, payload in tasks)
+            *(execute(name, payload) for name, payload in tasks)
         )
 
     async def run_multi_agent(self, tasks: list[dict[str, Any]]) -> dict[str, Any]:
@@ -213,11 +305,15 @@ class AIOrchestrator:
         if not tasks:
             return {"status": "completed", "results": {}}
 
+        settings = getattr(self, "settings", None)
+        semaphore = asyncio.Semaphore(max(1, int(getattr(settings, "max_parallel_agent_tasks", 4))))
+
         async def execute(task: dict[str, Any]) -> tuple[str, dict[str, Any]]:
             task_id = str(task.get("id") or task.get("agent") or "task")
             agent_name = str(task.get("agent") or "")
             try:
-                output = await self.run_agent(agent_name, dict(task.get("payload") or {}))
+                async with semaphore:
+                    output = await self._run_agent_isolated(agent_name, dict(task.get("payload") or {}))
                 return task_id, {"agent": agent_name, "status": "completed", "output": output}
             except Exception as exc:
                 logger.warning("Multi-agent task '%s' failed: %s", task_id, exc)

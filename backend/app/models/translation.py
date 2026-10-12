@@ -4,6 +4,8 @@ from uuid import uuid4
 from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.time import utc_now_naive
+
 from app.core.database import Base
 from app.models.base import new_id, TimestampMixin
 
@@ -68,7 +70,7 @@ class VocabularyItem(Base, TimestampMixin):
     difficulty: Mapped[str] = mapped_column(String(16), default="medium")
     mastery: Mapped[int] = mapped_column(Integer, default=0)
     review_count: Mapped[int] = mapped_column(Integer, default=0)
-    last_reviewed: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_reviewed: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
     __table_args__ = (
         Index("ix_vocabulary_user_language", "user_id", "source_language", "target_language"),
@@ -88,7 +90,7 @@ class Flashcard(Base, TimestampMixin):
     ease_factor: Mapped[int] = mapped_column(Integer, default=2500)
     interval: Mapped[int] = mapped_column(Integer, default=0)
     repetitions: Mapped[int] = mapped_column(Integer, default=0)
-    due_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    due_date: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive)
 
     __table_args__ = (
         Index("ix_flashcards_user_due", "user_id", "due_date"),
@@ -146,7 +148,7 @@ class OCRElement(Base):
     bbox_height: Mapped[int] = mapped_column(Integer, nullable=False)
     element_type: Mapped[str] = mapped_column(String(16), default="word")
     confidence: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now_naive, nullable=False)
 
 
 class Quiz(Base, TimestampMixin):

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.agent import AgentConfig
 from app.repositories.agents import AgentRepository
 from app.schemas.agent import AgentCreate
-from app.services.ai_gateway import AIGateway
+from app.services.ai_gateway import AIGateway, get_shared_gateway
 from app.services.tool_service import ToolService
 
 
@@ -14,7 +14,7 @@ class AgentService:
     def __init__(self, db: AsyncSession, gateway: AIGateway | None = None):
         self.db = db
         self.repo = AgentRepository(db)
-        self.gateway = gateway or AIGateway()
+        self.gateway = gateway or get_shared_gateway()
         self.tools = ToolService()
 
     async def create(self, user_id: str, payload: AgentCreate) -> AgentConfig:

@@ -26,3 +26,22 @@ async def test_chat_uses_gemini_when_api_key_is_configured():
 
     assert reply == "Gemini reply"
     gateway.gemini.chat.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_embedding_is_optional_when_local_provider_is_disabled():
+    settings = SimpleNamespace(
+        environment="production",
+        ollama_base_url="http://127.0.0.1:11434",
+        ollama_allow_local_in_production=False,
+        ollama_enabled=True,
+        embedding_enabled=True,
+        embedding_provider="ollama",
+        model_fallback_chains={"embeddings": ["ollama:nomic-embed-text:latest"]},
+    )
+
+    with patch("app.services.ai_gateway.get_settings", return_value=settings):
+        gateway = AIGateway()
+        gateway.ollama._get_client = AsyncMock(side_effect=AssertionError("embedding must fail fast"))
+
+        assert await gateway.embed("optional retrieval") == []

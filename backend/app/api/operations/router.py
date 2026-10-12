@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.application.operations_engine import OperationsEngine
 from app.schemas.operations import ProductionReadinessResponse
-from app.services.ai_gateway import AIGateway
+from app.services.ai_gateway import get_shared_gateway
 
 
 router = APIRouter()
@@ -15,4 +15,4 @@ async def readiness() -> ProductionReadinessResponse:
 
 @router.get("/models")
 async def model_health() -> dict:
-    return await AIGateway().model_health()
+    return await get_shared_gateway().model_health()

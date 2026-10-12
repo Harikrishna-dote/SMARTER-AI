@@ -5,12 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime
 from typing import Any
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.time import utc_now
 from app.domain.tutor.class_preparation import (
     compare_curriculum,
     compile_prepared_content,
@@ -273,7 +273,7 @@ class ClassPreparationService:
             "stage": payload.stage,
             "position": payload.position,
             "paused": payload.paused,
-            "saved_at": datetime.utcnow().isoformat(),
+            "saved_at": utc_now().isoformat(),
         }
         optional_fields = (
             "current_concept",

@@ -12,12 +12,12 @@ from pytesseract import TesseractNotFoundError
 
 from typing import Any
 
-from app.services.ai_gateway import AIGateway
+from app.services.ai_gateway import AIGateway, get_shared_gateway
 
 
 class VisionService:
     def __init__(self, gateway: AIGateway | None = None):
-        self.gateway = gateway or AIGateway()
+        self.gateway = gateway or get_shared_gateway()
         self._configure_tesseract()
 
     @staticmethod

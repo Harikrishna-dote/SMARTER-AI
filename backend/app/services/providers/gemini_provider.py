@@ -31,6 +31,11 @@ class GeminiProvider:
             return False
         return bool(self.api_key)
 
+    async def close(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+        self._client = None
+
     def _mark_unavailable(self, duration: int = 60):
         self._unavailable_until = time.time() + duration
         logger.warning("Gemini marked unavailable for %d seconds.", duration)

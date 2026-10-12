@@ -6,7 +6,7 @@ import httpx
 from fastapi import HTTPException, status
 
 from app.core.config import get_settings
-from app.services.ai_gateway import AIGateway
+from app.services.ai_gateway import AIGateway, get_shared_gateway
 
 
 class ReadableHTMLParser(HTMLParser):
@@ -48,7 +48,7 @@ class ReadableHTMLParser(HTMLParser):
 class SourceService:
     def __init__(self, gateway: AIGateway | None = None):
         self.settings = get_settings()
-        self.gateway = gateway or AIGateway()
+        self.gateway = gateway or get_shared_gateway()
 
     async def extract_url_context(self, url: str) -> dict:
         parsed = urlparse(url)

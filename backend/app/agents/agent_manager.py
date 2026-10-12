@@ -18,7 +18,7 @@ from typing import Any
 from app.agents.base import AgentCapability, AgentRequest, AgentResponse, BaseAgent
 from app.agents.registry import AgentRegistry, get_agent_registry
 from app.plugins.events import Event, get_event_bus
-from app.services.ai_gateway import AIGateway
+from app.services.ai_gateway import AIGateway, get_shared_gateway
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ class AgentManager:
 
     def __init__(self, gateway: AIGateway | None = None) -> None:
         self.registry: AgentRegistry = get_agent_registry()
-        self.gateway = gateway or AIGateway()
+        self.gateway = gateway or get_shared_gateway()
         self._sessions: dict[str, AgentSession] = {}
         self._execution_logs: list[ExecutionLog] = []
         self._max_logs = 10_000

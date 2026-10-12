@@ -36,7 +36,9 @@ async def test_orchestrator_routes_to_ollama_for_coding():
     gateway.ollama.chat.return_value = "Ollama code response"
     
     # Mock health manager inside router to ensure routing happens
-    with patch.object(gateway.model_router.health, 'selectable_model', return_value="qwen2.5-coder:7b"):
+    with patch.object(gateway.model_router.health, 'refresh', new=AsyncMock()), patch.object(
+        gateway.model_router.health, 'selectable_model', return_value="qwen2.5-coder:7b"
+    ):
         orchestrator = AIOrchestrator(gateway)
         
         # Execute
