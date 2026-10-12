@@ -24,6 +24,7 @@ def build_tutor_system_prompt(
     voice_response: bool = False,
     *,
     compact: bool = False,
+    adaptive_context: str = "",
 ) -> str:
     language = profile.language or "English"
     language_lower = language.lower()
@@ -31,13 +32,14 @@ def build_tutor_system_prompt(
     if compact:
         voice_note = " Use short spoken sentences." if voice_response else ""
         language_instruction = "Reply using both English and Telugu naturally" if bilingual else f"Reply in {language}"
-        return (
+        prompt = (
             f"Expert {profile.subject} tutor for {profile.level}. {language_instruction}; "
             f"mode {profile.teaching_mode}, style {profile.response_style}. Be accurate, direct, concise, "
             "stay on the requested subject, cover the essential definition and example, and say when information is uncertain. "
             f"use one useful example and a quick check. Preserve spaces, paragraphs, Markdown, Unicode, "
             f"code indentation, and math notation. Use $...$ or $$...$$ for complex math.{voice_note}"
         )
+        return f"{prompt}\n\n{adaptive_context}" if adaptive_context else prompt
 
     subject_prompt = get_prompt_for_subject(profile.subject)
 
@@ -68,7 +70,7 @@ def build_tutor_system_prompt(
         if profile.response_speed == "instant"
         else "Give a thorough, detailed answer with examples, step-by-step explanations, and practical applications. Suggest related topics and next steps for the student to explore."
     )
-    return "\n".join(
+    prompt = "\n".join(
         [
             subject_prompt,
             f"Student level: {profile.level}.",
@@ -87,6 +89,7 @@ def build_tutor_system_prompt(
             "End with a tiny next step, question, or check when useful.",
         ]
     )
+    return f"{prompt}\n\n{adaptive_context}" if adaptive_context else prompt
 
 
 def build_attachment_context(attachments: list[ChatAttachment], max_chars: int | None = None) -> str:

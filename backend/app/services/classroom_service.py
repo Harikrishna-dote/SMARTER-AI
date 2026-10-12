@@ -369,7 +369,14 @@ class ClassroomService:
         await self.db.commit()
         await self.db.refresh(progress)
         if update.topic:
-            await MemoryService(self.db).persist_learning_progress(user_id, update.topic, learning_score)
+            await MemoryService(self.db).persist_learning_progress(
+                user_id,
+                update.topic,
+                learning_score,
+                hints_used=update.hints_used,
+                evidence_type=update.evidence_type,
+                explicit_correction=update.explicit_correction,
+            )
 
         xp_into = progress.xp % _LEVEL_TARGET_XP
         return ClassroomProgressRead(
@@ -388,6 +395,9 @@ class ClassroomService:
             achievements=progress.achievements or [],
             last_active_date=progress.last_active_date.isoformat() if progress.last_active_date else None,
         )
+
+    async def get_topic_mastery(self, user_id: str, topic: str) -> dict[str, Any] | None:
+        return await MemoryService(self.db).get_topic_mastery(user_id, topic)
 
     async def get_progress(self, user_id: str) -> ClassroomProgressRead:
         progress = await self._get_or_create_progress(user_id)

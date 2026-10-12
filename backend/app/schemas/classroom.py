@@ -286,6 +286,9 @@ class ProgressUpdate(BaseModel):
     quiz_score: int | None = Field(default=None, ge=0, le=100)
     homework_correct: int | None = Field(default=None, ge=0)
     homework_total: int | None = Field(default=None, ge=0)
+    hints_used: int = Field(default=0, ge=0, le=20)
+    evidence_type: str = Field(default="assessment", max_length=40)
+    explicit_correction: bool = False
 
 
 class Badge(BaseModel):
@@ -309,6 +312,21 @@ class ClassroomProgressRead(BaseModel):
     badges: list[Badge] = Field(default_factory=list)
     achievements: list[str] = Field(default_factory=list)
     last_active_date: str | None = None
+
+
+class TopicMasteryRead(BaseModel):
+    topic: str
+    record: dict[str, Any] | None = None
+
+
+class IntelligencePlanRequest(BaseModel):
+    topic: str = Field(min_length=1, max_length=180)
+    message: str | None = Field(default=None, max_length=4_000)
+    subject: str = Field(default="general", max_length=80)
+    mastery: dict[str, Any] | None = None
+    weak_topics: list[str] = Field(default_factory=list, max_length=20)
+    strong_topics: list[str] = Field(default_factory=list, max_length=20)
+    overall_accuracy: int | None = Field(default=None, ge=0, le=100)
 
 
 VisualType = Literal[
@@ -447,6 +465,8 @@ __all__ = [
     "ProgressUpdate",
     "Badge",
     "ClassroomProgressRead",
+    "TopicMasteryRead",
+    "IntelligencePlanRequest",
     "VisualType",
     "VisualAnalysis",
     "PrerequisiteCheck",

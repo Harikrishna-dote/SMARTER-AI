@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from pathlib import Path
@@ -109,4 +110,22 @@ async def test_memory_engine_updates_existing_layer_record():
     assert item is existing
     assert item.value == "new"
     assert repo.db.added == [existing]
+
+
+@pytest.mark.asyncio
+async def test_memory_engine_keeps_topic_mastery_evidence_as_json():
+    repo = FakeRepo()
+    engine = MemoryEngine(repo, FakeKnowledgeGraph())
+
+    item = await engine.record_learning_event(
+        "user-1",
+        topic="algebra",
+        score=82,
+        evidence_type="quiz",
+    )
+
+    record = json.loads(item.value)
+    assert record["topic"] == "algebra"
+    assert record["status"] == "developing"
+    assert record["evidence"][0]["type"] == "quiz"
 

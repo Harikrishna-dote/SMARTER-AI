@@ -11,8 +11,10 @@ from typing import Any, AsyncIterator
 import httpx
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.models.chat import Conversation, Message
+from app.models.classroom import ClassroomProgress
 from app.repositories.chats import ConversationRepository, MessageRepository
 from app.repositories.documents import DocumentRepository
 from app.schemas.chat import ChatRequest
@@ -263,6 +265,20 @@ class ChatService:
             conversation.title = self._title_from_message(effective_message, payload.tutor.subject)
 
         history = await self.messages.list_for_conversation(conversation_id)
+        adaptive_context = ""
+        classroom_progress = None
+        if payload.use_memory:
+            progress_result = await self.db.execute(
+                select(ClassroomProgress).where(ClassroomProgress.user_id == user_id)
+            )
+            classroom_progress = progress_result.scalar_one_or_none()
+            adaptive_context = await self.memory.adaptive_context(
+                user_id,
+                payload.tutor.subject,
+                weak_topics=list(classroom_progress.weak_topics or []) if classroom_progress else None,
+                strong_topics=list(classroom_progress.strong_topics or []) if classroom_progress else None,
+                overall_accuracy=classroom_progress.accuracy if classroom_progress else None,
+            )
         prompt_messages = [
             {
                 "role": "system",
@@ -270,6 +286,7 @@ class ChatService:
                     payload.tutor,
                     payload.voice_response,
                     compact=payload.tutor.response_speed == "instant",
+                    adaptive_context=adaptive_context,
                 ),
             }
         ]

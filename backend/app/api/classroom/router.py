@@ -32,9 +32,16 @@ from app.schemas.classroom import (
     SyllabusExtractionRead,
     ProgressUpdate,
     ClassroomProgressRead,
+    TopicMasteryRead,
+    IntelligencePlanRequest,
 )
 from app.services.classroom_service import ClassroomService
 from app.services.class_preparation_service import ClassPreparationService
+from app.domain.tutor.learning_intelligence import (
+    build_adaptive_teaching_context,
+    classify_learning_request,
+    validate_visualization_spec,
+)
 
 router = APIRouter()
 
@@ -300,6 +307,41 @@ async def update_progress(
     return await orchestrator.classroom_service.update_progress(current_user.id, payload)
 
 
+@router.get("/mastery/{topic}", response_model=TopicMasteryRead)
+async def read_topic_mastery(
+    topic: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    orchestrator: AIOrchestrator = Depends(get_orchestrator),
+) -> TopicMasteryRead:
+    record = await orchestrator.classroom_service.get_topic_mastery(current_user.id, topic)
+    return TopicMasteryRead(topic=topic, record=record)
+
+
+@router.post("/intelligence/plan")
+async def build_intelligence_plan(
+    payload: IntelligencePlanRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    orchestrator: AIOrchestrator = Depends(get_orchestrator),
+) -> dict:
+    """Return the explainable baseline used to prepare a classroom answer."""
+
+    topic = payload.topic
+    message = payload.message or topic
+    subject = payload.subject
+    classification = classify_learning_request(message, subject=subject, topic=topic)
+    mastery = payload.mastery
+    context = build_adaptive_teaching_context(
+        topic,
+        mastery=mastery,
+        weak_topics=payload.weak_topics[:3],
+        strong_topics=payload.strong_topics[:3],
+        overall_accuracy=payload.overall_accuracy,
+    )
+    return {"classification": classification.to_dict(), "teaching_context": context}
+
+
 @router.post("/visualization")
 async def generate_visualization(
     payload: dict,
@@ -485,7 +527,7 @@ async def generate_visualization(
                 "interactive_points": [{"x": 400, "y": 300, "label": concept, "description": f"Main concept: {topic}"}],
             }
 
-        return scene
+        return validate_visualization_spec(scene)
     except Exception as exc:
         logger.warning("Visualization generation failed, using fallback: %s", exc)
         return {

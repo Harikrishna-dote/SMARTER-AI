@@ -1,5 +1,6 @@
 """Application layer for multi-layer memory and retrieval context."""
 
+import json
 from datetime import date, timedelta
 from typing import Iterable
 
@@ -13,6 +14,7 @@ from app.domain.memory import (
     next_review_interval_days,
     parse_memory_layer,
 )
+from app.domain.tutor.learning_intelligence import parse_mastery_value, update_topic_mastery
 from app.models.memory import MemoryItem
 from app.repositories.memory import MemoryRepository
 from app.schemas.chat import TutorProfile
@@ -75,14 +77,26 @@ class MemoryEngine:
         *,
         topic: str,
         score: float | None = None,
+        hints_used: int = 0,
+        evidence_type: str = "assessment",
+        explicit_correction: bool = False,
         source: str = "classroom-progress",
     ) -> MemoryItem:
-        mastery = estimate_mastery_state(score)
-        review_date = date.today() + timedelta(days=next_review_interval_days(mastery))
-        value = (
-            f"topic={topic}; mastery={mastery.value}; "
-            f"score={score if score is not None else 'unknown'}; review_on={review_date.isoformat()}"
+        key = f"mastery:{topic}"
+        existing = await self.repo.get_by_key(user_id, canonical_memory_key(MemoryLayer.LEARNING, key))
+        previous = parse_mastery_value(existing.value) if existing else None
+        updated = update_topic_mastery(
+            previous,
+            score=score,
+            hints_used=hints_used,
+            evidence_type=evidence_type,
+            explicit_correction=explicit_correction,
         )
+        mastery = estimate_mastery_state(updated.get("score"))
+        review_date = date.today() + timedelta(days=next_review_interval_days(mastery, updated.get("attempts", 0)))
+        updated["topic"] = topic[:180]
+        updated["review_on"] = review_date.isoformat()
+        value = json.dumps(updated, ensure_ascii=False, sort_keys=True)
         return await self.remember_layer(user_id, MemoryLayer.LEARNING, f"mastery:{topic}", value, source=source)
 
     async def build_retrieval_context(self, user_id: str, query: str, *, limit: int = 8) -> RetrievalContext:

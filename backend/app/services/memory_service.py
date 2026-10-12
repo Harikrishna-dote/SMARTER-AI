@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 
 from app.application.memory_engine import MemoryEngine
 from app.domain.memory import MemoryLayer, should_store_conversation_memory
+from app.domain.tutor.learning_intelligence import build_adaptive_teaching_context, parse_mastery_value
 from app.models.memory import MemoryItem
 from app.repositories.memory import MemoryRepository
 from app.schemas.memory import MemoryCreate
@@ -51,12 +52,66 @@ class MemoryService:
         )
         await self.repo.db.commit()
 
-    async def persist_learning_progress(self, user_id: str, topic: str, score: float | None = None) -> None:
+    async def persist_learning_progress(
+        self,
+        user_id: str,
+        topic: str,
+        score: float | None = None,
+        *,
+        hints_used: int = 0,
+        evidence_type: str = "assessment",
+        explicit_correction: bool = False,
+    ) -> None:
         try:
-            await self.engine.record_learning_event(user_id, topic=topic, score=score)
+            await self.engine.record_learning_event(
+                user_id,
+                topic=topic,
+                score=score,
+                hints_used=hints_used,
+                evidence_type=evidence_type,
+                explicit_correction=explicit_correction,
+            )
             await self.repo.db.commit()
         except SQLAlchemyError:
             await self.repo.db.rollback()
+
+    async def adaptive_context(
+        self,
+        user_id: str,
+        topic: str,
+        *,
+        weak_topics: list[str] | None = None,
+        strong_topics: list[str] | None = None,
+        overall_accuracy: int | None = None,
+    ) -> str:
+        """Return the closest stored topic estimate for prompt personalization."""
+
+        memories = await self.repo.search(user_id, topic, limit=12)
+        normalized_topic = topic.strip().lower()
+        mastery = None
+        for memory in memories:
+            if not memory.key.startswith("learning:mastery:"):
+                continue
+            memory_topic = memory.key.rsplit(":", 1)[-1].replace("_", " ")
+            if memory_topic in normalized_topic or normalized_topic in memory_topic:
+                mastery = parse_mastery_value(memory.value)
+                break
+        if mastery is None:
+            return ""
+        return build_adaptive_teaching_context(
+            topic,
+            mastery=mastery,
+            weak_topics=weak_topics,
+            strong_topics=strong_topics,
+            overall_accuracy=overall_accuracy,
+        )
+
+    async def get_topic_mastery(self, user_id: str, topic: str) -> dict | None:
+        """Read one student's explainable topic record without exposing other users."""
+
+        key = f"learning:mastery:{topic.strip().lower().replace(' ', '_')}"
+        memory = await self.repo.get_by_key(user_id, key)
+        return parse_mastery_value(memory.value) if memory else None
 
     async def persist_conversation_signal(self, user_id: str, conversation_id: str, content: str) -> None:
         if not should_store_conversation_memory(content):
